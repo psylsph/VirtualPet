@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Needs, PetState, NeedKey } from './types';
+import type { Needs, PetState, NeedKey, PetType } from './types';
 import { registerAction, isQuietActive, msToClock } from './quietTime';
+import * as Snd from './sound';
 
 const IDLE_TO_DROWSY_MS = 8 * 60 * 1000;
 const DROWSY_TO_SLEEP_MS = 2 * 60 * 1000; // => sleep at 10 min total
@@ -11,15 +12,38 @@ const clamp = (n:number, min=0, max=100) => Math.max(min, Math.min(max, n));
 
 export default function App() {
   const [petState, setPetState] = useState<PetState>('AWAKE');
+  const [petType, setPetType] = useState<PetType>('DOG');
   const [needs, setNeeds] = useState<Needs>({
     hunger: 70, cleanliness: 70, playfulness: 70, affection: 70
   });
   const [quietUntil, setQuietUntil] = useState<number | null>(isQuietActive().until);
   const [now, setNow] = useState<number>(Date.now());
   const [sleepUntil, setSleepUntil] = useState<number | null>(null);
+  const [soundOn, setSoundOn] = useState<boolean>(() => {
+    const v = localStorage.getItem('sound');
+    return v !== 'off';
+  });
 
   const lastInputRef = useRef<number>(Date.now());
   const autoSleepStartedRef = useRef<boolean>(false);
+  const actionTimerRef = useRef<number | null>(null);
+  const [action, setAction] = useState<('FEED'|'GROOM'|'PLAY'|'CUDDLE') | null>(null);
+
+  // load/save pet type from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('petType');
+    if (saved === 'DOG' || saved === 'CAT' || saved === 'RABBIT' || saved === 'HAMSTER') {
+      setPetType(saved);
+    }
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('petType', petType);
+  }, [petType]);
+
+  // inform sound module of current pet
+  useEffect(() => {
+    try { Snd.setPetType(petType); } catch {}
+  }, [petType]);
 
   // === idle → drowsy → sleep checks ===
   useEffect(() => {
@@ -69,6 +93,10 @@ export default function App() {
     const onAny = () => { lastInputRef.current = Date.now(); };
     window.addEventListener('pointerdown', onAny);
     window.addEventListener('keydown', onAny);
+    // unlock/resume audio context on first gesture
+    const unlock = () => { Snd.resume(); };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') lastInputRef.current = Date.now();
     });
@@ -77,6 +105,19 @@ export default function App() {
       window.removeEventListener('keydown', onAny);
     };
   }, []);
+
+  // apply mute setting to sound module
+  useEffect(() => {
+    Snd.setMuted(!soundOn);
+    localStorage.setItem('sound', soundOn ? 'on' : 'off');
+    // manage snore loop on mute toggle
+    if (soundOn && petState === 'SLEEPING') {
+      Snd.resume();
+      Snd.startSnore();
+    } else {
+      Snd.stopSnore();
+    }
+  }, [soundOn]);
 
   // Quiet Time heartbeat
   useEffect(() => {
@@ -121,6 +162,25 @@ export default function App() {
       };
     });
 
+    // Trigger transient action animation/state
+    if (actionTimerRef.current) {
+      window.clearTimeout(actionTimerRef.current);
+      actionTimerRef.current = null;
+    }
+    setAction(kind);
+    const duration = kind === 'PLAY' ? 2000 : 900;
+    actionTimerRef.current = window.setTimeout(() => setAction(null), duration);
+
+    // Sound per action
+    // Ensure context is resumed before attempting to play
+    Snd.resume();
+    if (soundOn) {
+      if (kind === 'FEED') Snd.playFeed();
+      else if (kind === 'GROOM') Snd.playGroom();
+      else if (kind === 'CUDDLE') Snd.playCuddle();
+      else if (kind === 'PLAY') Snd.playPlay();
+    }
+
     // Soft banner feedback (console – keep UI minimal)
     console.debug(`Active minutes in rolling hour: ${activeInWindow}`);
   };
@@ -133,12 +193,74 @@ export default function App() {
     autoSleepStartedRef.current = false;
     lastInputRef.current = Date.now();
     registerAction(); // waking counts as an action
+    if (soundOn) Snd.playWake();
+    Snd.stopSnore();
   };
 
+  // play sounds when transitioning into sleep via auto-sleep
+  const prevStateRef = useRef<PetState>('AWAKE');
+  useEffect(() => {
+    if (petState !== prevStateRef.current) {
+      if (petState === 'SLEEPING') {
+        if (soundOn) {
+          Snd.resume();
+          Snd.playSleep();
+          Snd.startSnore();
+        }
+      } else {
+        Snd.stopSnore();
+      }
+      prevStateRef.current = petState;
+    }
+  }, [petState, soundOn]);
+
   const PetEmoji = () => {
-    if (petState === 'SLEEPING') return <div className="pet-emoji" aria-label="sleeping pet">🐶💤</div>;
-    if (petState === 'DROWSY')  return <div className="pet-emoji" aria-label="drowsy pet">🐶😪</div>;
-    return <div className="pet-emoji" aria-label="awake pet">🐶✨</div>;
+    const emojiByType: Record<PetType, string> = {
+      DOG: '🐶',
+      CAT: '🐱',
+      RABBIT: '🐰',
+      HAMSTER: '🐹',
+    };
+    const labelBase = petType.toLowerCase();
+    const stateClass = petState.toLowerCase();
+    const actionClass = action ? `action-${action.toLowerCase()}` : '';
+    return (
+      <div
+        className={`pet-emoji ${labelBase} ${stateClass} ${actionClass}`}
+        aria-label={`${labelBase} ${stateClass}`}
+      >
+        <span className="pet-icon">
+          <span className="pet-glyph">{emojiByType[petType]}</span>
+          {(petState === 'SLEEPING' || petState === 'DROWSY') && (
+            <span className={`zzz ${petState === 'SLEEPING' ? 'sleep' : 'drowsy'}`}>💤</span>
+          )}
+          {action === 'FEED' && <span className="overlay feed" aria-hidden>🍗</span>}
+          {action === 'GROOM' && <span className="overlay groom" aria-hidden>✨</span>}
+          {action === 'CUDDLE' && <span className="overlay cuddle" aria-hidden>💖</span>}
+          {action === 'PLAY' && petType === 'DOG' && (
+            <span className="play-scene dog" aria-hidden>
+              <span className="ball">⚽</span>
+            </span>
+          )}
+          {action === 'PLAY' && petType === 'CAT' && (
+            <span className="play-scene cat" aria-hidden>
+              <span className="ball">🧶</span>
+            </span>
+          )}
+          {action === 'PLAY' && petType === 'HAMSTER' && (
+            <span className="play-scene hamster" aria-hidden>
+              <span className="wheel"><span className="spokes" /></span>
+            </span>
+          )}
+          {action === 'PLAY' && petType === 'RABBIT' && (
+            <span className="play-scene rabbit" aria-hidden>
+              <span className="butterfly">🦋</span>
+              <span className="butterfly b2">🦋</span>
+            </span>
+          )}
+        </span>
+      </div>
+    );
   };
 
   const renderBar = (label:string, value:number) => (
@@ -152,11 +274,34 @@ export default function App() {
 
   const quietActive = !!quietUntil && Date.now() < quietUntil;
   const quietRemaining = quietActive ? quietUntil! - Date.now() : 0;
+  const totalToSleep = IDLE_TO_DROWSY_MS + DROWSY_TO_SLEEP_MS;
+  const idleSince = now - lastInputRef.current;
+  const sleepCountdownMs = Math.max(0, totalToSleep - idleSince);
 
   return (
     <div className="app">
       <header className="header">
-        <span className="title">Pet Sim</span>
+        <span className="title">My Pet</span>
+        <select
+          aria-label="Choose your pet"
+          value={petType}
+          onChange={(e) => setPetType(e.target.value as PetType)}
+          style={{ marginLeft: 'auto' }}
+        >
+          <option value="DOG">Dog 🐶</option>
+          <option value="CAT">Cat 🐱</option>
+          <option value="RABBIT">Rabbit 🐰</option>
+          <option value="HAMSTER">Hamster 🐹</option>
+        </select>
+        <button
+          className="icon-btn"
+          aria-label={soundOn ? 'Mute sound' : 'Unmute sound'}
+          title={soundOn ? 'Mute sound' : 'Unmute sound'}
+          onClick={() => setSoundOn(s => !s)}
+          style={{ marginLeft: 8 }}
+        >
+          {soundOn ? '🔊' : '🔇'}
+        </button>
         <span style={{ fontSize: 12, color: '#94a3b8' }}>No death · Auto-sleeps after 10m idle · 20m break/hr</span>
       </header>
 
@@ -164,6 +309,9 @@ export default function App() {
         <div className="pet-card" role="region" aria-label="pet area">
           <PetEmoji />
           <div className="state">State: {petState}</div>
+          {petState !== 'SLEEPING' && (
+            <div className="note" aria-live="polite">Auto-sleep in {msToClock(sleepCountdownMs)}</div>
+          )}
 
           {quietActive && (
             <div className="qt-overlay">
@@ -209,7 +357,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        MVP demo. For real abuse-resistance, also enforce Quiet Time on the server.
+        <span>By Stuart Harding (2025) · </span><a href="https://github.com/psylsph/VirtualPet">GitHub</a>
       </footer>
     </div>
   );

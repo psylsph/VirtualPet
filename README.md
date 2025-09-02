@@ -1,69 +1,34 @@
-# React + TypeScript + Vite
+# Virtual Pet (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A small, client‑only virtual pet demo focused on healthy play patterns:
+- Auto‑sleeps after 10 minutes of inactivity (idle → drowsy → sleeping).
+- Soft “Quiet Time” break: after 40 active minutes in a rolling hour, actions pause for 20 minutes. Implemented client‑side via `localStorage` (see `src/quietTime.ts`).
 
-Currently, two official plugins are available:
+## Quickstart
+- Requirements: Node.js 18+ and npm.
+- Install: `npm install`
+- Develop: `npm run dev` then open `http://localhost:5173`
+- Lint: `npm run lint`
+- Build: `npm run build` (outputs to `dist/`)
+- Preview build: `npm run preview`
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Project Structure
+- `src/` – app code: `main.tsx`, `App.tsx`, `quietTime.ts`, `types.ts`, styles (`index.css`, `App.css`).
+- `public/` – static assets.
+- `dist/` – production build output.
+- Config – `vite.config.ts`, `eslint.config.js`, `tsconfig*.json`, `netlify.toml`.
 
-## Expanding the ESLint configuration
+## Development Notes
+- React 19 + Vite 7. Functional components and hooks only.
+- Typescript first: prefer explicit types for public utilities and props.
+- Accessibility: basic ARIA roles/labels are included; please preserve them when changing UI.
+- Quiet Time: registered on each action; uses minute‑buckets in `localStorage` and a `quietUntil` timestamp. For real apps, enforce server‑side too.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Deploy
+Configured for static hosting. For Netlify, use the defaults:
+- Build command: `npm run build`
+- Publish directory: `dist`
+Environment variables should be managed in Netlify’s dashboard; avoid committing secrets.
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Contributing
+See AGENTS.md for coding style, testing guidance, and PR expectations.

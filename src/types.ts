@@ -1,4 +1,5 @@
 export type PetState = 'AWAKE' | 'DROWSY' | 'SLEEPING';
+export type PetType = 'DOG' | 'CAT' | 'RABBIT' | 'HAMSTER';
 export type NeedKey = 'hunger' | 'cleanliness' | 'playfulness' | 'affection';
 
 export interface Needs {
