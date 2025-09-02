@@ -302,7 +302,7 @@ export default function App() {
         >
           {soundOn ? '🔊' : '🔇'}
         </button>
-        <span style={{ fontSize: 12, color: '#94a3b8' }}>No death · Auto-sleeps after 10m idle · 20m break/hr</span>
+        <span style={{ fontSize: 12, color: '#94a3b8' }}>Auto-sleeps after 10m idle · 20m break/hr</span>
       </header>
 
       <main className="scene">
